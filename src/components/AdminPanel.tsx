@@ -42,8 +42,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
   const [loading, setLoading] = useState(false);
   const [adminSearch, setAdminSearch] = useState('');
   const [editingBusiness, setEditingBusiness] = useState<Business | null>(null);
+  const [editBizCustomNiche, setEditBizCustomNiche] = useState('');
+  const [editBizUseCustomNiche, setEditBizUseCustomNiche] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [editCatSubText, setEditCatSubText] = useState('');
+  const [actionError, setActionError] = useState<string | null>(null);
   const [newCategoryModalOpen, setNewCategoryModalOpen] = useState(false);
   const [newCatData, setNewCatData] = useState({
     name: '',
@@ -281,21 +284,51 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
     }
   };
 
+  const openEditBusiness = (biz: Business) => {
+    setActionError(null);
+    const cat = categories.find((c) => Number(c.id) === Number(biz.categoryId));
+    const subs = cat?.subcategories || [];
+    const currentSub = (biz.subcategory || '').trim();
+    const isOther =
+      !cat ||
+      cat.slug === 'outros-servicos' ||
+      cat.name.toLowerCase().includes('outro') ||
+      subs.length === 0;
+    const isListedSub = currentSub && subs.includes(currentSub);
+
+    setEditingBusiness({
+      ...biz,
+      categoryId: cat ? cat.id : categories[0]?.id || biz.categoryId,
+      categoryName: cat ? cat.name : biz.categoryName,
+      subcategory: isListedSub ? currentSub : isOther ? '' : subs[0] || '',
+    });
+
+    if (isOther || (currentSub && !isListedSub)) {
+      setEditBizUseCustomNiche(true);
+      setEditBizCustomNiche(currentSub);
+    } else {
+      setEditBizUseCustomNiche(false);
+      setEditBizCustomNiche('');
+    }
+  };
+
   const handleDeleteBusinessConfirm = async (id: number) => {
     const currentToken = token || sessionStorage.getItem('ninho2_admin_token');
     if (!currentToken) return;
+    setActionError(null);
     try {
       const res = await fetch(`/api/admin/businesses/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${currentToken}` },
       });
-      if (res.ok) {
-        setConfirmDelete(null);
-        await fetchAdminData();
-        onDataChanged();
-      }
-    } catch (err) {
-      console.error('Erro ao excluir:', err);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao excluir cadastro');
+      setConfirmDelete(null);
+      await fetchAdminData();
+      onDataChanged();
+    } catch (err: any) {
+      setActionError(err.message || 'Erro ao excluir cadastro');
+      setConfirmDelete(null);
     }
   };
 
@@ -303,6 +336,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
     e.preventDefault();
     const currentToken = token || sessionStorage.getItem('ninho2_admin_token');
     if (!currentToken || !editingBusiness) return;
+    setActionError(null);
+
+    const selectedCat = categories.find((c) => Number(c.id) === Number(editingBusiness.categoryId));
+    const resolvedSub = editBizUseCustomNiche
+      ? editBizCustomNiche.trim()
+      : (editingBusiness.subcategory || '').trim();
+
+    if (editBizUseCustomNiche && !resolvedSub) {
+      setActionError('Informe o nicho ou atividade específica do negócio.');
+      return;
+    }
+
+    const updatedKeywords = Array.from(
+      new Set(
+        [
+          selectedCat?.name || editingBusiness.categoryName,
+          resolvedSub,
+          ...(editingBusiness.keywords || '').split(',').map((k) => k.trim()),
+        ].filter(Boolean)
+      )
+    ).join(', ');
+
     try {
       const res = await fetch(`/api/admin/businesses/${editingBusiness.id}`, {
         method: 'PUT',
@@ -313,28 +368,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
         body: JSON.stringify({
           name: editingBusiness.name,
           ownerName: editingBusiness.ownerName,
-          categoryName: editingBusiness.categoryName,
-          subcategory: editingBusiness.subcategory || null,
+          categoryId: Number(editingBusiness.categoryId),
+          categoryName: selectedCat?.name || editingBusiness.categoryName,
+          subcategory: resolvedSub || null,
           description: editingBusiness.description,
           whatsapp: editingBusiness.whatsapp.replace(/\D/g, ''),
-          keywords: editingBusiness.keywords,
+          keywords: updatedKeywords,
         }),
       });
-      if (res.ok) {
-        setEditingBusiness(null);
-        await fetchAdminData();
-        onDataChanged();
-      }
-    } catch (err) {
-      console.error('Erro ao salvar negócio:', err);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar alterações do negócio');
+      setEditingBusiness(null);
+      await fetchAdminData();
+      onDataChanged();
+    } catch (err: any) {
+      setActionError(err.message || 'Erro ao salvar negócio');
     }
   };
+
+  const sanitizeSlugClient = (val: string) =>
+    val
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
 
   // Categories CRUD
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     const currentToken = token || sessionStorage.getItem('ninho2_admin_token');
     if (!currentToken) return;
+    setActionError(null);
     try {
       const res = await fetch('/api/admin/categories', {
         method: 'POST',
@@ -344,20 +409,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
         },
         body: JSON.stringify({
           name: newCatData.name,
-          slug: newCatData.slug || newCatData.name.toLowerCase().replace(/\s+/g, '-'),
+          slug: sanitizeSlugClient(newCatData.slug || newCatData.name),
           description: newCatData.description,
           icon: newCatData.icon,
           subcategories: newCatData.subcategoriesText,
         }),
       });
-      if (res.ok) {
-        setNewCategoryModalOpen(false);
-        setNewCatData({ name: '', slug: '', description: '', icon: 'Store', subcategoriesText: '' });
-        await fetchAdminData();
-        onDataChanged();
-      }
-    } catch (err) {
-      console.error('Erro ao criar categoria:', err);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao criar categoria');
+      setNewCategoryModalOpen(false);
+      setNewCatData({ name: '', slug: '', description: '', icon: 'Store', subcategoriesText: '' });
+      await fetchAdminData();
+      onDataChanged();
+    } catch (err: any) {
+      setActionError(err.message || 'Erro ao criar categoria');
     }
   };
 
@@ -365,6 +430,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
     e.preventDefault();
     const currentToken = token || sessionStorage.getItem('ninho2_admin_token');
     if (!currentToken || !editingCategory) return;
+    setActionError(null);
     try {
       const res = await fetch(`/api/admin/categories/${editingCategory.id}`, {
         method: 'PUT',
@@ -376,34 +442,37 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
           name: editingCategory.name,
           description: editingCategory.description,
           icon: editingCategory.icon,
+          active: editingCategory.active,
           subcategories: editCatSubText,
         }),
       });
-      if (res.ok) {
-        setEditingCategory(null);
-        await fetchAdminData();
-        onDataChanged();
-      }
-    } catch (err) {
-      console.error('Erro ao atualizar categoria:', err);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao atualizar categoria');
+      setEditingCategory(null);
+      await fetchAdminData();
+      onDataChanged();
+    } catch (err: any) {
+      setActionError(err.message || 'Erro ao atualizar categoria');
     }
   };
 
   const handleDeleteCategoryConfirm = async (id: number) => {
     const currentToken = token || sessionStorage.getItem('ninho2_admin_token');
     if (!currentToken) return;
+    setActionError(null);
     try {
       const res = await fetch(`/api/admin/categories/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${currentToken}` },
       });
-      if (res.ok) {
-        setConfirmDelete(null);
-        await fetchAdminData();
-        onDataChanged();
-      }
-    } catch (err) {
-      console.error('Erro ao excluir categoria:', err);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao excluir categoria');
+      setConfirmDelete(null);
+      await fetchAdminData();
+      onDataChanged();
+    } catch (err: any) {
+      setActionError(err.message || 'Erro ao excluir categoria');
+      setConfirmDelete(null);
     }
   };
 
@@ -560,6 +629,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
 
         {/* Tab Content Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          {actionError && (
+            <div className="mb-4 p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between gap-2 text-xs text-red-700 font-medium">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{actionError}</span>
+              </div>
+              <button
+                onClick={() => setActionError(null)}
+                className="p-1 hover:bg-red-100 rounded-lg cursor-pointer"
+                aria-label="Fechar aviso"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {/* TAB 1: PENDING REQUESTS */}
           {activeTab === 'pending' && (
             <div className="space-y-4">
@@ -703,7 +788,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                         )}
                       </button>
                       <button
-                        onClick={() => setEditingBusiness(b)}
+                        onClick={() => openEditBusiness(b)}
                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 cursor-pointer"
                       >
                         <Edit2 className="w-3.5 h-3.5" /> Editar
@@ -789,7 +874,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
 
                             {/* Edit */}
                             <button
-                              onClick={() => setEditingBusiness(b)}
+                              onClick={() => openEditBusiness(b)}
                               className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
                               title="Editar dados"
                             >
@@ -966,85 +1051,161 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
         )}
 
         {/* Edit Business Modal */}
-        {editingBusiness && (
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-2xs flex items-start sm:items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto">
-            <div className="bg-white rounded-2xl p-5 sm:p-6 max-w-lg w-full space-y-4 shadow-xl my-auto max-h-[88dvh] overflow-y-auto">
-              <h4 className="font-bold text-gray-900 text-sm">Editar Cadastro de Negócio</h4>
-              <form onSubmit={handleSaveBusinessEdit} className="space-y-3 text-xs">
-                <div>
-                  <label className="block font-bold mb-1">Nome do Negócio</label>
-                  <input
-                    type="text"
-                    value={editingBusiness.name}
-                    onChange={(e) => setEditingBusiness({ ...editingBusiness, name: e.target.value })}
-                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold mb-1">Responsável</label>
-                  <input
-                    type="text"
-                    value={editingBusiness.ownerName}
-                    onChange={(e) => setEditingBusiness({ ...editingBusiness, ownerName: e.target.value })}
-                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold mb-1">Atividade específica / Nicho</label>
-                  <input
-                    type="text"
-                    value={editingBusiness.subcategory || ''}
-                    onChange={(e) => setEditingBusiness({ ...editingBusiness, subcategory: e.target.value })}
-                    placeholder="Ex: Barbeiro, Piscineiro, Locação de caçambas"
-                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold mb-1">WhatsApp</label>
-                  <input
-                    type="text"
-                    value={editingBusiness.whatsapp}
-                    onChange={(e) => setEditingBusiness({ ...editingBusiness, whatsapp: e.target.value })}
-                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold mb-1">Descrição</label>
-                  <textarea
-                    rows={3}
-                    value={editingBusiness.description}
-                    onChange={(e) => setEditingBusiness({ ...editingBusiness, description: e.target.value })}
-                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold mb-1">Palavras-chave</label>
-                  <input
-                    type="text"
-                    value={editingBusiness.keywords}
-                    onChange={(e) => setEditingBusiness({ ...editingBusiness, keywords: e.target.value })}
-                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
-                  />
-                </div>
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditingBusiness(null)}
-                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl cursor-pointer"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 font-bold bg-[#315B3D] text-white rounded-xl hover:bg-[#25462e] cursor-pointer"
-                  >
-                    Salvar Alterações
-                  </button>
-                </div>
-              </form>
+        {editingBusiness && (() => {
+          const editCatObj = categories.find((c) => Number(c.id) === Number(editingBusiness.categoryId));
+          const editCatSubs = editCatObj?.subcategories || [];
+          const editCatIsOther =
+            !editCatObj ||
+            editCatObj.slug === 'outros-servicos' ||
+            editCatObj.name.toLowerCase().includes('outro') ||
+            editCatSubs.length === 0;
+
+          return (
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-2xs flex items-start sm:items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto">
+              <div className="bg-white rounded-2xl p-5 sm:p-6 max-w-lg w-full space-y-4 shadow-xl my-auto max-h-[88dvh] overflow-y-auto">
+                <h4 className="font-bold text-gray-900 text-sm">Editar Cadastro de Negócio</h4>
+                <form onSubmit={handleSaveBusinessEdit} className="space-y-3 text-xs">
+                  <div>
+                    <label className="block font-bold mb-1">Nome do Negócio *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editingBusiness.name}
+                      onChange={(e) => setEditingBusiness({ ...editingBusiness, name: e.target.value })}
+                      className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold mb-1">Responsável *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editingBusiness.ownerName}
+                      onChange={(e) => setEditingBusiness({ ...editingBusiness, ownerName: e.target.value })}
+                      className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-[#F8FAF8] border border-[#E2EBE2]">
+                    <div>
+                      <label className="block font-bold mb-1">Categoria de atuação *</label>
+                      <select
+                        value={editingBusiness.categoryId}
+                        onChange={(e) => {
+                          const nextCat = categories.find((c) => String(c.id) === e.target.value);
+                          const nextSubs = nextCat?.subcategories || [];
+                          const nextIsOther =
+                            !nextCat ||
+                            nextCat.slug === 'outros-servicos' ||
+                            nextCat.name.toLowerCase().includes('outro') ||
+                            nextSubs.length === 0;
+                          setEditingBusiness({
+                            ...editingBusiness,
+                            categoryId: Number(e.target.value),
+                            categoryName: nextCat?.name || editingBusiness.categoryName,
+                            subcategory: nextIsOther ? '' : nextSubs[0] || '',
+                          });
+                          setEditBizUseCustomNiche(nextIsOther);
+                          if (!nextIsOther) setEditBizCustomNiche('');
+                        }}
+                        className="w-full p-2.5 text-base sm:text-xs bg-white border border-gray-300 rounded-xl"
+                      >
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {!editCatIsOther && (
+                      <div>
+                        <label className="block font-bold mb-1">Atividade específica *</label>
+                        <select
+                          value={editBizUseCustomNiche ? '__custom__' : editingBusiness.subcategory || ''}
+                          onChange={(e) => {
+                            if (e.target.value === '__custom__') {
+                              setEditBizUseCustomNiche(true);
+                            } else {
+                              setEditBizUseCustomNiche(false);
+                              setEditBizCustomNiche('');
+                              setEditingBusiness({ ...editingBusiness, subcategory: e.target.value });
+                            }
+                          }}
+                          className="w-full p-2.5 text-base sm:text-xs bg-white border border-gray-300 rounded-xl"
+                        >
+                          {editCatSubs.map((sub) => (
+                            <option key={sub} value={sub}>
+                              {sub}
+                            </option>
+                          ))}
+                          <option value="__custom__">Não encontrei minha atividade (informar nicho)</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {(editCatIsOther || editBizUseCustomNiche) && (
+                      <div className="sm:col-span-2">
+                        <label className="block font-bold mb-1">Nicho / Atividade específica *</label>
+                        <input
+                          type="text"
+                          required
+                          value={editBizCustomNiche}
+                          onChange={(e) => setEditBizCustomNiche(e.target.value)}
+                          placeholder="Ex: Barbeiro, Piscineiro, Locação de caçambas"
+                          className="w-full p-2.5 text-base sm:text-xs bg-white border border-gray-300 rounded-xl"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block font-bold mb-1">WhatsApp *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editingBusiness.whatsapp}
+                      onChange={(e) => setEditingBusiness({ ...editingBusiness, whatsapp: e.target.value })}
+                      className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold mb-1">Descrição *</label>
+                    <textarea
+                      rows={3}
+                      required
+                      value={editingBusiness.description}
+                      onChange={(e) => setEditingBusiness({ ...editingBusiness, description: e.target.value })}
+                      className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold mb-1">Palavras-chave</label>
+                    <input
+                      type="text"
+                      value={editingBusiness.keywords}
+                      onChange={(e) => setEditingBusiness({ ...editingBusiness, keywords: e.target.value })}
+                      className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingBusiness(null)}
+                      className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 font-bold bg-[#315B3D] text-white rounded-xl hover:bg-[#25462e] cursor-pointer"
+                    >
+                      Salvar Alterações
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Create Category Modal */}
         {newCategoryModalOpen && (
@@ -1154,6 +1315,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                   />
                 </div>
                 <div>
+                  <label className="block font-bold mb-1">Ícone</label>
+                  <select
+                    value={editingCategory.icon || 'Store'}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, icon: e.target.value })}
+                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
+                  >
+                    <option value="Store">Loja / Comércio (Store)</option>
+                    <option value="Utensils">Alimentação (Utensils)</option>
+                    <option value="Cake">Doces e Bolos (Cake)</option>
+                    <option value="Pizza">Pizzaria (Pizza)</option>
+                    <option value="Waves">Piscinas (Waves)</option>
+                    <option value="Trees">Jardinagem (Trees)</option>
+                    <option value="Car">Automotivo (Car)</option>
+                    <option value="Scissors">Beleza / Barbeiro (Scissors)</option>
+                    <option value="Hammer">Construção (Hammer)</option>
+                    <option value="Wrench">Elétrica / Hidráulica (Wrench)</option>
+                    <option value="Sparkles">Estética / Limpeza (Sparkles)</option>
+                    <option value="Dog">Pets (Dog)</option>
+                    <option value="Dumbbell">Esportes e Aulas (Dumbbell)</option>
+                    <option value="Navigation">Transporte (Navigation)</option>
+                    <option value="Package">Locação de Equipamentos (Package)</option>
+                    <option value="Briefcase">Outros Serviços (Briefcase)</option>
+                  </select>
+                </div>
+                <div>
                   <label className="block font-bold mb-1">Atividades / Subcategorias (separadas por vírgula)</label>
                   <textarea
                     rows={3}
@@ -1163,6 +1349,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                     className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
                   />
                 </div>
+                <label className="flex items-center gap-2 pt-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editingCategory.active}
+                    onChange={(e) => setEditingCategory({ ...editingCategory, active: e.target.checked })}
+                    className="rounded border-gray-300 text-[#315B3D]"
+                  />
+                  <span className="font-semibold text-gray-700">Exibir categoria no catálogo público</span>
+                </label>
                 <div className="flex justify-end gap-2 pt-2">
                   <button
                     type="button"

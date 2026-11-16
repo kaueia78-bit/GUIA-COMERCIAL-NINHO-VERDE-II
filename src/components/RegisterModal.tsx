@@ -49,15 +49,33 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
   const [notifyAdminUrl, setNotifyAdminUrl] = useState<string>('');
 
   useEffect(() => {
-    if (!formData.categoryId && categories.length > 0) {
+    if (categories.length === 0) return;
+
+    const currentCat = categories.find((c) => String(c.id) === String(formData.categoryId));
+    if (!currentCat) {
       const firstCat = categories[0];
+      const firstSubs = firstCat.subcategories || [];
       setFormData((prev) => ({
         ...prev,
         categoryId: String(firstCat.id),
-        subcategory: firstCat.subcategories?.[0] || '',
+        subcategory: firstSubs.length > 0 ? firstSubs[0] : CUSTOM_NICHE_VALUE,
+      }));
+      return;
+    }
+
+    const subs = currentCat.subcategories || [];
+    const isOther =
+      currentCat.slug === 'outros-servicos' ||
+      currentCat.name.toLowerCase().includes('outro') ||
+      subs.length === 0;
+
+    if (!isOther && formData.subcategory !== CUSTOM_NICHE_VALUE && !subs.includes(formData.subcategory)) {
+      setFormData((prev) => ({
+        ...prev,
+        subcategory: subs[0] || CUSTOM_NICHE_VALUE,
       }));
     }
-  }, [categories, formData.categoryId]);
+  }, [isOpen, categories, formData.categoryId, formData.subcategory]);
 
   if (!isOpen) return null;
 

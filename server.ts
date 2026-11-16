@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import * as dotenv from 'dotenv';
@@ -14,10 +15,11 @@ import {
   getAdminStats,
   saveContactMessage,
   getContactMessages,
+  removeAccents,
 } from './src/db/queries.ts';
 import { db } from './src/db/index.ts';
-import { categories, contactMessages } from './src/db/schema.ts';
-import { eq } from 'drizzle-orm';
+import { businesses, categories, contactMessages } from './src/db/schema.ts';
+import { eq, ne } from 'drizzle-orm';
 import { requireAdmin, AuthRequest } from './src/middleware/auth.ts';
 import { adminAuth } from './src/lib/firebase-admin.ts';
 import { getOrCreateUser } from './src/db/users.ts';
@@ -325,7 +327,56 @@ async function startServer() {
   app.put('/api/admin/businesses/:id', requireAdmin, async (req: AuthRequest, res) => {
     try {
       const id = Number(req.params.id);
-      const updated = await updateBusiness(id, req.body);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: 'ID de negócio inválido' });
+      }
+
+      const {
+        name,
+        ownerName,
+        categoryId,
+        categoryName,
+        subcategory,
+        description,
+        whatsapp,
+        keywords,
+        status,
+      } = req.body;
+
+      const updatePayload: Partial<typeof businesses.$inferInsert> = {};
+      if (typeof name === 'string' && name.trim()) updatePayload.name = name.trim();
+      if (typeof ownerName === 'string' && ownerName.trim()) updatePayload.ownerName = ownerName.trim();
+      if (typeof description === 'string' && description.trim()) updatePayload.description = description.trim();
+      if (typeof whatsapp === 'string' && whatsapp.trim()) {
+        updatePayload.whatsapp = whatsapp.replace(/\D/g, '');
+      }
+      if (subcategory !== undefined) {
+        updatePayload.subcategory = typeof subcategory === 'string' && subcategory.trim() ? subcategory.trim() : null;
+      }
+      if (typeof keywords === 'string') updatePayload.keywords = keywords.trim();
+      if (status && ['approved', 'rejected', 'suspended', 'pending'].includes(status)) {
+        updatePayload.status = status;
+      }
+
+      if (categoryId !== undefined && !isNaN(Number(categoryId))) {
+        const [catRow] = await db
+          .select()
+          .from(categories)
+          .where(eq(categories.id, Number(categoryId)))
+          .limit(1);
+        if (catRow) {
+          updatePayload.categoryId = catRow.id;
+          updatePayload.categoryName = catRow.name;
+        }
+      } else if (typeof categoryName === 'string' && categoryName.trim()) {
+        updatePayload.categoryName = categoryName.trim();
+      }
+
+      const updated = await updateBusiness(id, updatePayload);
+      if (!updated) {
+        return res.status(404).json({ error: 'Negócio não encontrado' });
+      }
+
       broadcastUpdate('businesses');
       res.json({ message: 'Dados atualizados com sucesso', data: updated });
     } catch (error: any) {
@@ -354,11 +405,27 @@ async function startServer() {
     }
   });
 
+  const sanitizeSlug = (input: string) =>
+    removeAccents(input)
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || `categoria-${Date.now()}`;
+
   app.post('/api/admin/categories', requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { name, slug, description, icon, subcategories, active, sortOrder } = req.body;
-      if (!name || !slug) {
-        return res.status(400).json({ error: 'Nome e slug são obrigatórios' });
+      if (!name || !String(name).trim()) {
+        return res.status(400).json({ error: 'O nome da categoria é obrigatório' });
+      }
+
+      const cleanSlug = sanitizeSlug(slug && String(slug).trim() ? String(slug) : String(name));
+
+      const existing = await db
+        .select({ id: categories.id })
+        .from(categories)
+        .where(eq(categories.slug, cleanSlug))
+        .limit(1);
+      if (existing.length > 0) {
+        return res.status(400).json({ error: 'Já existe uma categoria com esse identificador (slug).' });
       }
 
       const parsedSubcategories = Array.isArray(subcategories)
@@ -369,8 +436,8 @@ async function startServer() {
 
       const [created] = await db.insert(categories)
         .values({
-          name: name.trim(),
-          slug: slug.trim().toLowerCase(),
+          name: String(name).trim(),
+          slug: cleanSlug,
           description: description?.trim() || null,
           icon: icon || 'Store',
           subcategories: parsedSubcategories,
@@ -397,20 +464,35 @@ async function startServer() {
         ? subcategories.split(',').map((s) => s.trim()).filter(Boolean)
         : undefined;
 
+      const cleanName = typeof name === 'string' && name.trim() ? name.trim() : undefined;
+      const cleanSlug = typeof slug === 'string' && slug.trim() ? sanitizeSlug(slug) : undefined;
+
       const [updated] = await db.update(categories)
         .set({
-          ...(name ? { name: name.trim() } : {}),
-          ...(slug ? { slug: slug.trim().toLowerCase() } : {}),
+          ...(cleanName ? { name: cleanName } : {}),
+          ...(cleanSlug ? { slug: cleanSlug } : {}),
           ...(description !== undefined ? { description: description?.trim() || null } : {}),
           ...(icon ? { icon } : {}),
           ...(parsedSubcategories !== undefined ? { subcategories: parsedSubcategories } : {}),
-          ...(active !== undefined ? { active } : {}),
+          ...(active !== undefined ? { active: Boolean(active) } : {}),
           ...(sortOrder !== undefined ? { sortOrder: Number(sortOrder) } : {}),
         })
         .where(eq(categories.id, id))
         .returning();
 
-      broadcastUpdate('categories');
+      if (!updated) {
+        return res.status(404).json({ error: 'Categoria não encontrada' });
+      }
+
+      // Keep businesses.categoryName synchronized if the category was renamed
+      if (cleanName) {
+        await db
+          .update(businesses)
+          .set({ categoryName: cleanName, updatedAt: new Date() })
+          .where(eq(businesses.categoryId, id));
+      }
+
+      broadcastUpdate('all');
       res.json({ message: 'Categoria atualizada', data: updated });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -420,8 +502,32 @@ async function startServer() {
   app.delete('/api/admin/categories/:id', requireAdmin, async (req: AuthRequest, res) => {
     try {
       const id = Number(req.params.id);
+      const remaining = await db
+        .select()
+        .from(categories)
+        .where(ne(categories.id, id));
+
+      if (remaining.length === 0) {
+        return res.status(400).json({ error: 'Não é possível excluir a única categoria do catálogo.' });
+      }
+
+      const fallback =
+        remaining.find((c) => c.slug === 'outros-servicos') ||
+        remaining.find((c) => c.active) ||
+        remaining[0];
+
+      // Reassign any businesses using this category before deleting to avoid FK errors
+      await db
+        .update(businesses)
+        .set({
+          categoryId: fallback.id,
+          categoryName: fallback.name,
+          updatedAt: new Date(),
+        })
+        .where(eq(businesses.categoryId, id));
+
       const [deleted] = await db.delete(categories).where(eq(categories.id, id)).returning();
-      broadcastUpdate('categories');
+      broadcastUpdate('all');
       res.json({ message: 'Categoria excluída', data: deleted });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -458,6 +564,8 @@ async function startServer() {
     res.status(404).json({ error: 'Rota da API não encontrada' });
   });
 
+  const httpServer = http.createServer(app);
+
   // VITE INTEGRATION FOR DEV & STATIC SERVE FOR PROD
   if (process.env.NODE_ENV === 'production') {
     const distPath = path.resolve(__dirname, 'dist');
@@ -478,14 +586,47 @@ async function startServer() {
     });
   } else {
     const { createServer: createViteServer } = await import('vite');
+    const hmrDisabled = process.env.DISABLE_HMR === 'true';
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: hmrDisabled ? false : { server: httpServer },
+        ...(hmrDisabled ? { ws: false as const } : {}),
+      },
       appType: 'spa',
     });
+
+    // Ensure /@vite/client never throws unhandled WebSocket rejections in proxied/disabled-HMR previews
+    app.get('/@vite/client', async (req, res, next) => {
+      try {
+        const result = await vite.transformRequest('/@vite/client');
+        if (!result?.code) return next();
+
+        const connectCall = 'transport.connect(createHMRHandler(handleMessage));';
+        let safeCode = hmrDisabled
+          ? result.code.replace(connectCall, '/* HMR WebSocket disabled */')
+          : result.code.replace(
+              connectCall,
+              'Promise.resolve(transport.connect(createHMRHandler(handleMessage))).catch(() => {});'
+            );
+
+        safeCode = safeCode.replaceAll(
+          'console.error(`[vite] failed to connect to websocket',
+          'console.debug(`[vite] websocket unavailable'
+        );
+
+        res.setHeader('Content-Type', 'application/javascript');
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(safeCode);
+      } catch {
+        next();
+      }
+    });
+
     app.use(vite.middlewares);
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Guia Comercial Ninho Verde II rodando na porta ${PORT}`);
   });
 }
