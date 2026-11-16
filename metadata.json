@@ -1,0 +1,6 @@
+{
+  "name": "Guia Comercial Ninho Verde II",
+  "description": "Catálogo digital exclusivo com os negócios, pequenos empreendedores e prestadores de serviços do loteamento Ninho Verde II em Pardinho - SP.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
