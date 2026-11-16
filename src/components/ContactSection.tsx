@@ -56,7 +56,7 @@ export const ContactSection: React.FC = () => {
       <div className="bg-white rounded-3xl border border-[#E2EBE2] shadow-xl shadow-[#315B3D]/5 overflow-hidden">
         <div className="grid grid-cols-1 lg:grid-cols-5">
           {/* Left: Info Card */}
-          <div className="lg:col-span-2 bg-gradient-to-br from-[#315B3D] via-[#25462e] to-[#1a3321] text-white p-8 sm:p-10 flex flex-col justify-between">
+          <div className="lg:col-span-2 bg-gradient-to-br from-[#315B3D] via-[#25462e] to-[#1a3321] text-white p-6 sm:p-10 flex flex-col justify-between">
             <div className="space-y-6">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-[#8DBF91] text-xs font-bold border border-white/10">
                 <Building2 className="w-3.5 h-3.5" />
@@ -117,7 +117,7 @@ export const ContactSection: React.FC = () => {
           </div>
 
           {/* Right: Real Contact Form */}
-          <div className="lg:col-span-3 p-8 sm:p-10 bg-white">
+          <div className="lg:col-span-3 p-6 sm:p-10 bg-white">
             <h4 className="text-xl font-bold text-[#1F3325] mb-1">Envie sua mensagem</h4>
             <p className="text-xs text-gray-500 mb-6">
               Preencha o formulário abaixo e entraremos em contato o mais breve possível.
@@ -149,7 +149,7 @@ export const ContactSection: React.FC = () => {
                     placeholder="Ex: Carlos Oliveira"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
+                    className="w-full px-3.5 py-2.5 text-base sm:text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
                   />
                 </div>
 
@@ -163,7 +163,7 @@ export const ContactSection: React.FC = () => {
                     placeholder="carlos@email.com"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
+                    className="w-full px-3.5 py-2.5 text-base sm:text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
                   />
                 </div>
               </div>
@@ -178,7 +178,7 @@ export const ContactSection: React.FC = () => {
                     placeholder="(14) 99999-9999"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
+                    className="w-full px-3.5 py-2.5 text-base sm:text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
                   />
                 </div>
 
@@ -192,7 +192,7 @@ export const ContactSection: React.FC = () => {
                     placeholder="Ex: Dúvida sobre cadastro ou alteração"
                     value={formData.subject}
                     onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                    className="w-full px-3.5 py-2.5 text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
+                    className="w-full px-3.5 py-2.5 text-base sm:text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
                   />
                 </div>
               </div>
@@ -207,14 +207,14 @@ export const ContactSection: React.FC = () => {
                   placeholder="Escreva sua mensagem com detalhes..."
                   value={formData.message}
                   onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                  className="w-full p-3.5 text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
+                  className="w-full p-3.5 text-base sm:text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="inline-flex items-center justify-center gap-2 bg-[#315B3D] hover:bg-[#25462e] text-white px-7 py-3 rounded-xl font-bold text-sm shadow-md shadow-[#315B3D]/20 transition-all disabled:opacity-50 cursor-pointer"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[#315B3D] hover:bg-[#25462e] text-white px-7 py-3 rounded-xl font-bold text-sm shadow-md shadow-[#315B3D]/20 transition-all disabled:opacity-50 cursor-pointer"
               >
                 <Send className="w-4 h-4 text-[#8DBF91]" />
                 {loading ? 'Enviando...' : 'Enviar mensagem'}

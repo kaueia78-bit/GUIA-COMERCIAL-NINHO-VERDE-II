@@ -16,6 +16,7 @@ function MainContent() {
   const { user, role, token, loginWithGoogle } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
   const [businesses, setBusinesses] = useState<Business[]>([]);
+  const [totalApprovedCount, setTotalApprovedCount] = useState<number>(0);
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [loadingBusinesses, setLoadingBusinesses] = useState(true);
 
@@ -30,10 +31,10 @@ function MainContent() {
   const [pendingCount, setPendingCount] = useState(0);
 
   // Fetch Categories
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async (silent = false) => {
     try {
-      setLoadingCategories(true);
-      const res = await fetch('/api/categories');
+      if (!silent) setLoadingCategories(true);
+      const res = await fetch('/api/categories', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setCategories(data);
@@ -41,14 +42,14 @@ function MainContent() {
     } catch (err) {
       console.error('Erro ao buscar categorias:', err);
     } finally {
-      setLoadingCategories(false);
+      if (!silent) setLoadingCategories(false);
     }
-  };
+  }, []);
 
   // Fetch Approved Businesses with optional filters
-  const fetchBusinesses = useCallback(async () => {
+  const fetchBusinesses = useCallback(async (silent = false) => {
     try {
-      setLoadingBusinesses(true);
+      if (!silent) setLoadingBusinesses(true);
       const params = new URLSearchParams();
       if (searchTerm.trim()) {
         params.append('search', searchTerm.trim());
@@ -60,15 +61,18 @@ function MainContent() {
         params.append('subcategory', selectedSubcategory);
       }
 
-      const res = await fetch(`/api/businesses?${params.toString()}`);
+      const res = await fetch(`/api/businesses?${params.toString()}`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setBusinesses(data);
+        if (!searchTerm.trim() && !selectedCategory && !selectedSubcategory) {
+          setTotalApprovedCount(data.length);
+        }
       }
     } catch (err) {
       console.error('Erro ao buscar negócios:', err);
     } finally {
-      setLoadingBusinesses(false);
+      if (!silent) setLoadingBusinesses(false);
     }
   }, [searchTerm, selectedCategory, selectedSubcategory]);
 
@@ -79,6 +83,7 @@ function MainContent() {
       try {
         const res = await fetch('/api/admin/stats', {
           headers: { Authorization: `Bearer ${currentToken}` },
+          cache: 'no-store',
         });
         if (res.ok) {
           const stats = await res.json();
@@ -92,7 +97,7 @@ function MainContent() {
 
   useEffect(() => {
     fetchCategories();
-  }, []);
+  }, [fetchCategories]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -104,6 +109,49 @@ function MainContent() {
   useEffect(() => {
     checkPendingCount();
   }, [checkPendingCount]);
+
+  // Real-time multi-device sync via SSE + visibility/focus refresh + fallback polling
+  useEffect(() => {
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource('/api/events');
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'businesses' || payload.type === 'all') {
+            fetchBusinesses(true);
+            checkPendingCount();
+          }
+          if (payload.type === 'categories' || payload.type === 'all') {
+            fetchCategories(true);
+          }
+        } catch {
+          // Ignore malformed event
+        }
+      };
+    } catch {
+      // Fallback to focus/polling if EventSource is unavailable
+    }
+
+    const syncNow = () => {
+      if (document.visibilityState === 'visible') {
+        fetchBusinesses(true);
+        fetchCategories(true);
+        checkPendingCount();
+      }
+    };
+
+    window.addEventListener('focus', syncNow);
+    document.addEventListener('visibilitychange', syncNow);
+    const pollInterval = window.setInterval(syncNow, 30000);
+
+    return () => {
+      eventSource?.close();
+      window.removeEventListener('focus', syncNow);
+      document.removeEventListener('visibilitychange', syncNow);
+      window.clearInterval(pollInterval);
+    };
+  }, [fetchBusinesses, fetchCategories, checkPendingCount]);
 
   const handleClearFilters = () => {
     setSearchTerm('');
@@ -133,7 +181,7 @@ function MainContent() {
   const selectedCategoryObj = categories.find((c) => c.slug === selectedCategory);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F8FAF8] selection:bg-[#8DBF91]/40 selection:text-[#1F3325]">
+    <div className="min-h-screen flex flex-col bg-[#F8FAF8] selection:bg-[#8DBF91]/40 selection:text-[#1F3325] overflow-x-hidden">
       {/* Top Header */}
       <Header
         onOpenRegister={() => setRegisterOpen(true)}
@@ -147,7 +195,7 @@ function MainContent() {
         <Hero
           onExplore={() => handleScrollTo('catalog')}
           onRegister={() => setRegisterOpen(true)}
-          approvedCount={businesses.length}
+          approvedCount={totalApprovedCount || businesses.length}
         />
 
         {/* Real-Time Search Bar */}

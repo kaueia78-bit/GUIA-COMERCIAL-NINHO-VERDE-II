@@ -34,6 +34,53 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Prevent browser/proxy/CDN caching on all API endpoints so updates appear immediately for everyone
+  app.use('/api', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
+    next();
+  });
+
+  // Real-time Server-Sent Events (SSE) clients to push live catalog/category updates to all devices
+  const sseClients = new Set<Response>();
+  const broadcastUpdate = (type: 'businesses' | 'categories' | 'messages' | 'all') => {
+    const payload = `data: ${JSON.stringify({ type, ts: Date.now() })}\n\n`;
+    for (const client of sseClients) {
+      try {
+        client.write(payload);
+      } catch {
+        sseClients.delete(client);
+      }
+    }
+  };
+
+  app.get('/api/events', (req: Request, res: Response) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+
+    res.write(`data: ${JSON.stringify({ type: 'connected', ts: Date.now() })}\n\n`);
+    sseClients.add(res);
+
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(': heartbeat\n\n');
+      } catch {
+        clearInterval(heartbeat);
+        sseClients.delete(res);
+      }
+    }, 25000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      sseClients.delete(res);
+    });
+  });
+
   // Health check
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', service: 'Guia Comercial Ninho Verde II' });
@@ -138,6 +185,8 @@ async function startServer() {
       const adminWaText = `Olá! Nova solicitação de cadastro no Guia Comercial Ninho Verde II:\n\n*Nome do Negócio:* ${created.name}\n*Responsável:* ${created.ownerName}\n*Categoria:* ${categoryLabel}\n*WhatsApp:* ${created.whatsapp}\n*Descrição:* ${created.description}\n\nFavor analisar para aprovação no catálogo. Obrigado!`;
       const notifyAdminUrl = `https://wa.me/${SITE_CONFIG.supportPhone}?text=${encodeURIComponent(adminWaText)}`;
 
+      broadcastUpdate('businesses');
+
       res.status(201).json({
         message: 'Solicitação registrada com sucesso! Seu cadastro passará por análise da administração antes de ser publicado.',
         data: created,
@@ -159,6 +208,7 @@ async function startServer() {
       }
 
       const created = await saveContactMessage({ name, email, phone, subject, message });
+      broadcastUpdate('messages');
       res.status(201).json({
         message: 'Mensagem enviada com sucesso! A equipe de apoio responderá em breve.',
         data: created,
@@ -265,6 +315,7 @@ async function startServer() {
       }
 
       const updated = await updateBusinessStatus(id, status, reviewer, rejectionReason);
+      broadcastUpdate('businesses');
       res.json({ message: 'Status atualizado com sucesso', data: updated });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -275,6 +326,7 @@ async function startServer() {
     try {
       const id = Number(req.params.id);
       const updated = await updateBusiness(id, req.body);
+      broadcastUpdate('businesses');
       res.json({ message: 'Dados atualizados com sucesso', data: updated });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -285,6 +337,7 @@ async function startServer() {
     try {
       const id = Number(req.params.id);
       const deleted = await deleteBusiness(id);
+      broadcastUpdate('businesses');
       res.json({ message: 'Negócio removido com sucesso', data: deleted });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -326,6 +379,7 @@ async function startServer() {
         })
         .returning();
 
+      broadcastUpdate('categories');
       res.status(201).json({ message: 'Categoria criada com sucesso', data: created });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -356,6 +410,7 @@ async function startServer() {
         .where(eq(categories.id, id))
         .returning();
 
+      broadcastUpdate('categories');
       res.json({ message: 'Categoria atualizada', data: updated });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -366,6 +421,7 @@ async function startServer() {
     try {
       const id = Number(req.params.id);
       const [deleted] = await db.delete(categories).where(eq(categories.id, id)).returning();
+      broadcastUpdate('categories');
       res.json({ message: 'Categoria excluída', data: deleted });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -390,17 +446,34 @@ async function startServer() {
         .set({ status })
         .where(eq(contactMessages.id, id))
         .returning();
+      broadcastUpdate('messages');
       res.json({ message: 'Mensagem atualizada', data: updated });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
+  // Unknown API routes return clean JSON 404 instead of SPA HTML
+  app.all('/api/*', (req, res) => {
+    res.status(404).json({ error: 'Rota da API não encontrada' });
+  });
+
   // VITE INTEGRATION FOR DEV & STATIC SERVE FOR PROD
   if (process.env.NODE_ENV === 'production') {
     const distPath = path.resolve(__dirname, 'dist');
-    app.use(express.static(distPath));
+    app.use('/assets', express.static(path.join(distPath, 'assets'), {
+      maxAge: '1y',
+      immutable: true,
+    }));
+    app.use(express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        }
+      },
+    }));
     app.get('*', (req, res) => {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.sendFile(path.resolve(distPath, 'index.html'));
     });
   } else {

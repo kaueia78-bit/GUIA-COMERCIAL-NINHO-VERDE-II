@@ -57,7 +57,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         </div>
 
         {/* Suggestion Chips */}
-        <div className="mt-2.5 pt-2.5 border-t border-gray-100 flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+        <div className="mt-2.5 pt-2.5 border-t border-gray-100 flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5 text-xs">
           <span className="text-gray-400 font-semibold flex items-center gap-1 shrink-0 px-1">
             <Sparkles className="w-3.5 h-3.5 text-[#14b8a6]" />
             Populares:
@@ -67,7 +67,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
               <button
                 key={sug}
                 onClick={() => onSelectSuggestion(sug)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
                   searchTerm.toLowerCase() === sug.toLowerCase()
                     ? 'bg-[#315B3D] text-white font-bold'
                     : 'bg-[#F2F7F2] text-gray-600 hover:bg-[#EAF4E9] hover:text-[#315B3D]'

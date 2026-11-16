@@ -27,9 +27,9 @@ export const BusinessList: React.FC<BusinessListProps> = ({
       {/* Title & Filter Indicator */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 mb-6 border-b border-gray-200/80 gap-3">
         <div>
-          <h2 className="text-2xl font-extrabold text-[#1F3325] tracking-tight flex items-center gap-2.5">
-            Negócios e Serviços no Residencial
-            <span className="text-xs font-bold bg-[#EAF4E9] text-[#315B3D] px-2.5 py-1 rounded-full border border-[#8DBF91]/50">
+          <h2 className="text-xl sm:text-2xl font-extrabold text-[#1F3325] tracking-tight flex flex-wrap items-center gap-2 sm:gap-2.5">
+            <span>Negócios e Serviços no Residencial</span>
+            <span className="text-xs font-bold bg-[#EAF4E9] text-[#315B3D] px-2.5 py-1 rounded-full border border-[#8DBF91]/50 shrink-0">
               {businesses.length} {businesses.length === 1 ? 'disponível' : 'disponíveis'}
             </span>
           </h2>

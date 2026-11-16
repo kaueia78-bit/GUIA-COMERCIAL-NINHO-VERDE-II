@@ -63,14 +63,14 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
                 onSelectCategory(null);
                 onSelectSubcategory(null);
               }}
-              className={`p-3 rounded-xl border text-left transition-all duration-200 flex flex-col justify-between h-24 cursor-pointer group ${
+              className={`p-3 rounded-xl border text-left transition-all duration-200 flex flex-col justify-between min-h-[6.25rem] cursor-pointer group ${
                 selectedCategory === null
                   ? 'bg-[#315B3D] border-[#315B3D] text-white shadow-md shadow-[#315B3D]/20 ring-2 ring-[#315B3D]/30'
                   : 'bg-white border-[#E2EBE2] text-gray-700 hover:border-[#8DBF91] hover:bg-[#F8FAF8]'
               }`}
             >
               <div
-                className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                   selectedCategory === null
                     ? 'bg-white/20 text-white'
                     : 'bg-[#EAF4E9] text-[#315B3D] group-hover:scale-105 transition-transform'
@@ -78,10 +78,10 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
               >
                 <LayoutGrid className="w-4 h-4" />
               </div>
-              <div>
-                <span className="font-bold text-xs sm:text-sm block truncate">Todas</span>
+              <div className="mt-2">
+                <span className="font-bold text-xs sm:text-[13px] leading-tight block">Todas</span>
                 <span
-                  className={`text-[10px] block ${
+                  className={`text-[10px] block mt-0.5 ${
                     selectedCategory === null ? 'text-white/80' : 'text-gray-400'
                   }`}
                 >
@@ -101,14 +101,14 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
                     onSelectCategory(nextSlug);
                     onSelectSubcategory(null);
                   }}
-                  className={`p-3 rounded-xl border text-left transition-all duration-200 flex flex-col justify-between h-24 cursor-pointer group ${
+                  className={`p-3 rounded-xl border text-left transition-all duration-200 flex flex-col justify-between min-h-[6.25rem] cursor-pointer group ${
                     isSelected
                       ? 'bg-[#315B3D] border-[#315B3D] text-white shadow-md shadow-[#315B3D]/20 ring-2 ring-[#315B3D]/30'
                       : 'bg-white border-[#E2EBE2] text-gray-700 hover:border-[#8DBF91] hover:bg-[#F8FAF8]'
                   }`}
                 >
                   <div
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                       isSelected
                         ? 'bg-white/20 text-white'
                         : 'bg-[#EAF4E9] text-[#315B3D] group-hover:scale-105 transition-transform'
@@ -116,12 +116,12 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
                   >
                     {getCategoryIcon(cat.icon, { className: 'w-4 h-4' })}
                   </div>
-                  <div>
-                    <span className="font-bold text-xs sm:text-sm block truncate" title={cat.name}>
+                  <div className="mt-2">
+                    <span className="font-bold text-xs sm:text-[13px] leading-tight line-clamp-2 block" title={cat.name}>
                       {cat.name}
                     </span>
                     <span
-                      className={`text-[10px] block truncate ${
+                      className={`text-[10px] block truncate mt-0.5 ${
                         isSelected ? 'text-white/80' : 'text-gray-400'
                       }`}
                     >
@@ -145,7 +145,7 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
               <div className="flex items-center gap-1.5 flex-wrap">
                 <button
                   onClick={() => onSelectSubcategory(null)}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                     selectedSubcategory === null
                       ? 'bg-[#315B3D] text-white'
                       : 'bg-[#F2F7F2] text-gray-600 hover:bg-[#EAF4E9] hover:text-[#315B3D]'
@@ -159,7 +159,7 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
                     <button
                       key={sub}
                       onClick={() => onSelectSubcategory(isSubActive ? null : sub)}
-                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                         isSubActive
                           ? 'bg-[#14b8a6] text-white shadow-xs'
                           : 'bg-[#F2F7F2] text-gray-700 hover:bg-[#EAF4E9] hover:text-[#315B3D]'

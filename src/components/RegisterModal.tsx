@@ -201,11 +201,12 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-gray-100 my-8 relative">
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl max-w-2xl w-full p-5 sm:p-8 shadow-2xl border border-gray-100 my-auto max-h-[92dvh] overflow-y-auto relative">
         <button
           onClick={handleClose}
-          className="absolute top-5 right-5 p-2 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
+          aria-label="Fechar"
+          className="sticky sm:absolute top-0 sm:top-5 right-0 sm:right-5 float-right sm:float-none p-2 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 bg-white/90 transition-colors cursor-pointer z-10"
         >
           <X className="w-5 h-5" />
         </button>
@@ -314,7 +315,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                       placeholder="Ex: João Silva"
                       value={formData.ownerName}
                       onChange={(e) => setFormData({ ...formData, ownerName: e.target.value })}
-                      className="w-full pl-9 pr-3 py-2.5 text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
+                      className="w-full pl-9 pr-3 py-2.5 text-base sm:text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
                     />
                   </div>
                 </div>
@@ -332,7 +333,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                       placeholder="Ex: João Piscinas & Tratamento"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full pl-9 pr-3 py-2.5 text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
+                      className="w-full pl-9 pr-3 py-2.5 text-base sm:text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
                     />
                   </div>
                 </div>
@@ -352,7 +353,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                         value={formData.categoryId}
                         onChange={(e) => handleCategoryChange(e.target.value)}
                         required
-                        className="w-full pl-9 pr-3 py-2.5 text-sm bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none cursor-pointer"
+                        className="w-full pl-9 pr-3 py-2.5 text-base sm:text-sm bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none cursor-pointer"
                       >
                         {categories.map((c) => (
                           <option key={c.id} value={c.id}>
@@ -375,7 +376,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                           value={formData.subcategory}
                           onChange={(e) => handleSubcategoryChange(e.target.value)}
                           required
-                          className="w-full pl-9 pr-3 py-2.5 text-sm bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none cursor-pointer"
+                          className="w-full pl-9 pr-3 py-2.5 text-base sm:text-sm bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none cursor-pointer"
                         >
                           {categorySubs.map((sub) => (
                             <option key={sub} value={sub}>
@@ -410,7 +411,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                       placeholder="Ex: Consultoria em energia solar, Afinador de piano, Locação de tendas..."
                       value={formData.customNiche}
                       onChange={(e) => setFormData({ ...formData, customNiche: e.target.value })}
-                      className="w-full px-3.5 py-2.5 text-sm bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
+                      className="w-full px-3.5 py-2.5 text-base sm:text-sm bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
                     />
                     <p className="text-[11px] text-gray-600 mt-1">
                       Seu nicho específico aparecerá no anúncio e será encontrado instantaneamente na pesquisa.
@@ -433,7 +434,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                     value={formData.whatsapp}
                     onChange={(e) => handlePhoneChange(e.target.value)}
                     maxLength={15}
-                    className="w-full pl-9 pr-3 py-2.5 text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
+                    className="w-full pl-9 pr-3 py-2.5 text-base sm:text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
                   />
                 </div>
                 <span className="text-[10px] text-gray-400 mt-1 block">
@@ -452,12 +453,12 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                   placeholder="Ex: Atendimento no residencial com horário agendado. Limpeza, manutenção, orçamento sem compromisso."
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full p-3 text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
+                  className="w-full p-3 text-base sm:text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none"
                 />
               </div>
 
               {/* Submit Buttons */}
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-gray-100">
+              <div className="pt-4 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-3 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={handleClose}
@@ -468,7 +469,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="inline-flex items-center gap-2 bg-[#315B3D] hover:bg-[#25462e] text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-md shadow-[#315B3D]/20 transition-all disabled:opacity-50 cursor-pointer"
+                  className="inline-flex items-center justify-center gap-2 bg-[#315B3D] hover:bg-[#25462e] text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-md shadow-[#315B3D]/20 transition-all disabled:opacity-50 cursor-pointer"
                 >
                   {loading ? 'Enviando solicitação...' : 'Enviar para aprovação'}
                 </button>

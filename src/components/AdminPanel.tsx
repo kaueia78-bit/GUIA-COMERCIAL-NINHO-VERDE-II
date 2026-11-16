@@ -63,18 +63,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
   const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
 
-  const fetchAdminData = async () => {
+  // In-app delete confirmation state (avoids window.confirm in iframes/mobile)
+  const [confirmDelete, setConfirmDelete] = useState<{
+    type: 'business' | 'category';
+    id: number;
+    name: string;
+  } | null>(null);
+
+  const fetchAdminData = async (silent = false) => {
     const currentToken = token || sessionStorage.getItem('ninho2_admin_token');
     if (!currentToken) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const headers = { Authorization: `Bearer ${currentToken}` };
 
       const [statsRes, bizRes, catRes, msgRes] = await Promise.all([
-        fetch('/api/admin/stats', { headers }),
-        fetch('/api/admin/businesses?status=all', { headers }),
-        fetch('/api/admin/categories', { headers }),
-        fetch('/api/admin/messages', { headers }),
+        fetch('/api/admin/stats', { headers, cache: 'no-store' }),
+        fetch('/api/admin/businesses?status=all', { headers, cache: 'no-store' }),
+        fetch('/api/admin/categories', { headers, cache: 'no-store' }),
+        fetch('/api/admin/messages', { headers, cache: 'no-store' }),
       ]);
 
       if (statsRes.ok) setStats(await statsRes.json());
@@ -84,13 +91,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
     } catch (err) {
       console.error('Erro ao carregar dados administrativos:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     if (isOpen && (role === 'admin' || token)) {
       fetchAdminData();
+
+      let eventSource: EventSource | null = null;
+      try {
+        eventSource = new EventSource('/api/events');
+        eventSource.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload.type && payload.type !== 'connected') {
+              fetchAdminData(true);
+            }
+          } catch {
+            // Ignore malformed SSE event
+          }
+        };
+      } catch {
+        // Silent fallback
+      }
+
+      return () => {
+        eventSource?.close();
+      };
     }
   }, [isOpen, role, token]);
 
@@ -158,7 +186,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                   placeholder="Digite a senha..."
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
-                  className="w-full px-3.5 py-3 pr-10 text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none tracking-wider"
+                  className="w-full px-3.5 py-3 pr-10 text-base sm:text-sm bg-gray-50 border border-gray-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#8DBF91] focus:border-[#315B3D] focus:outline-none tracking-wider"
                 />
                 <button
                   type="button"
@@ -253,15 +281,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
     }
   };
 
-  const handleDeleteBusiness = async (id: number) => {
+  const handleDeleteBusinessConfirm = async (id: number) => {
     const currentToken = token || sessionStorage.getItem('ninho2_admin_token');
-    if (!currentToken || !confirm('Tem certeza que deseja excluir permanentemente este cadastro?')) return;
+    if (!currentToken) return;
     try {
       const res = await fetch(`/api/admin/businesses/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${currentToken}` },
       });
       if (res.ok) {
+        setConfirmDelete(null);
         await fetchAdminData();
         onDataChanged();
       }
@@ -360,15 +389,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
     }
   };
 
-  const handleDeleteCategory = async (id: number) => {
+  const handleDeleteCategoryConfirm = async (id: number) => {
     const currentToken = token || sessionStorage.getItem('ninho2_admin_token');
-    if (!currentToken || !confirm('Deseja excluir esta categoria?')) return;
+    if (!currentToken) return;
     try {
       const res = await fetch(`/api/admin/categories/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${currentToken}` },
       });
       if (res.ok) {
+        setConfirmDelete(null);
         await fetchAdminData();
         onDataChanged();
       }
@@ -390,31 +420,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-black/60 backdrop-blur-sm overflow-hidden animate-in fade-in duration-200">
-      <div className="bg-[#F8FAF8] rounded-3xl max-w-6xl w-full h-[90vh] flex flex-col shadow-2xl border border-gray-200 overflow-hidden">
+      <div className="bg-[#F8FAF8] rounded-2xl sm:rounded-3xl max-w-6xl w-full h-[94dvh] sm:h-[90vh] flex flex-col shadow-2xl border border-gray-200 overflow-hidden relative">
         {/* Top Bar */}
-        <div className="bg-white px-6 py-4 border-b border-[#E2EBE2] flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#315B3D] text-white flex items-center justify-center shadow-md">
-              <ShieldCheck className="w-6 h-6 text-[#8DBF91]" />
+        <div className="bg-white px-4 py-3 sm:px-6 sm:py-4 border-b border-[#E2EBE2] flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#315B3D] text-white flex items-center justify-center shadow-md shrink-0">
+              <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-[#8DBF91]" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-extrabold text-[#1F3325]">
-                  Painel Administrativo do Guia Comercial
+                <h2 className="text-sm sm:text-lg font-extrabold text-[#1F3325] truncate">
+                  Painel Administrativo
                 </h2>
-                <span className="text-[10px] font-bold bg-[#EAF4E9] text-[#315B3D] px-2 py-0.5 rounded-full border border-[#8DBF91]/50">
+                <span className="hidden sm:inline-flex text-[10px] font-bold bg-[#EAF4E9] text-[#315B3D] px-2 py-0.5 rounded-full border border-[#8DBF91]/50 shrink-0">
                   Senha Ativa
                 </span>
               </div>
-              <p className="text-xs text-gray-500">
+              <p className="hidden sm:block text-xs text-gray-500 truncate">
                 Controle de qualidade, verificação de moradores e gestão do catálogo
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
-              onClick={fetchAdminData}
+              onClick={() => fetchAdminData()}
               disabled={loading}
               className="p-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
               title="Recarregar dados"
@@ -426,14 +456,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                 logout();
                 onClose();
               }}
-              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-xl border border-red-200 font-semibold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 px-2.5 sm:px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-xl border border-red-200 font-semibold transition-colors cursor-pointer"
               title="Encerrar sessão de administrador"
             >
               <LogOut className="w-3.5 h-3.5" />
-              Sair
+              <span className="hidden sm:inline">Sair</span>
             </button>
             <button
               onClick={onClose}
+              aria-label="Fechar painel"
               className="p-2 text-gray-400 hover:text-gray-700 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
@@ -443,39 +474,39 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
 
         {/* Stats Row */}
         {stats && (
-          <div className="bg-white px-6 py-3 border-b border-[#E2EBE2] grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 shrink-0">
-            <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-100">
-              <span className="text-[11px] font-semibold text-gray-500 block">Total</span>
-              <span className="text-xl font-black text-[#1F3325]">{stats.total}</span>
+          <div className="bg-white px-4 sm:px-6 py-2.5 sm:py-3 border-b border-[#E2EBE2] grid grid-cols-3 md:grid-cols-6 gap-2 sm:gap-3 shrink-0">
+            <div className="p-2 sm:p-2.5 rounded-xl bg-gray-50 border border-gray-100">
+              <span className="text-[10px] sm:text-[11px] font-semibold text-gray-500 block">Total</span>
+              <span className="text-base sm:text-xl font-black text-[#1F3325]">{stats.total}</span>
             </div>
-            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200/80">
-              <span className="text-[11px] font-semibold text-amber-700 block">Pendentes</span>
-              <span className="text-xl font-black text-amber-800">{stats.pending}</span>
+            <div className="p-2 sm:p-2.5 rounded-xl bg-amber-50 border border-amber-200/80">
+              <span className="text-[10px] sm:text-[11px] font-semibold text-amber-700 block">Pendentes</span>
+              <span className="text-base sm:text-xl font-black text-amber-800">{stats.pending}</span>
             </div>
-            <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200/80">
-              <span className="text-[11px] font-semibold text-emerald-700 block">Aprovados</span>
-              <span className="text-xl font-black text-emerald-800">{stats.approved}</span>
+            <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-50 border border-emerald-200/80">
+              <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-700 block">Aprovados</span>
+              <span className="text-base sm:text-xl font-black text-emerald-800">{stats.approved}</span>
             </div>
-            <div className="p-2.5 rounded-xl bg-red-50 border border-red-200/80">
-              <span className="text-[11px] font-semibold text-red-700 block">Recusados</span>
-              <span className="text-xl font-black text-red-800">{stats.rejected}</span>
+            <div className="p-2 sm:p-2.5 rounded-xl bg-red-50 border border-red-200/80">
+              <span className="text-[10px] sm:text-[11px] font-semibold text-red-700 block">Recusados</span>
+              <span className="text-base sm:text-xl font-black text-red-800">{stats.rejected}</span>
             </div>
-            <div className="p-2.5 rounded-xl bg-[#EAF4E9] border border-[#8DBF91]/50">
-              <span className="text-[11px] font-semibold text-[#315B3D] block">Categorias</span>
-              <span className="text-xl font-black text-[#315B3D]">{stats.categoriesCount}</span>
+            <div className="p-2 sm:p-2.5 rounded-xl bg-[#EAF4E9] border border-[#8DBF91]/50">
+              <span className="text-[10px] sm:text-[11px] font-semibold text-[#315B3D] block">Categorias</span>
+              <span className="text-base sm:text-xl font-black text-[#315B3D]">{stats.categoriesCount}</span>
             </div>
-            <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200/80">
-              <span className="text-[11px] font-semibold text-blue-700 block">Mensagens</span>
-              <span className="text-xl font-black text-blue-800">{stats.unreadMessages}</span>
+            <div className="p-2 sm:p-2.5 rounded-xl bg-blue-50 border border-blue-200/80">
+              <span className="text-[10px] sm:text-[11px] font-semibold text-blue-700 block">Mensagens</span>
+              <span className="text-base sm:text-xl font-black text-blue-800">{stats.unreadMessages}</span>
             </div>
           </div>
         )}
 
-        {/* Tab Navigation */}
-        <div className="bg-white px-6 border-b border-[#E2EBE2] flex items-center gap-6 shrink-0">
+        {/* Tab Navigation (Horizontally scrollable on mobile/tablet) */}
+        <div className="bg-white px-4 sm:px-6 border-b border-[#E2EBE2] flex items-center gap-4 sm:gap-6 overflow-x-auto no-scrollbar whitespace-nowrap shrink-0">
           <button
             onClick={() => setActiveTab('pending')}
-            className={`py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 cursor-pointer ${
+            className={`py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-1.5 sm:gap-2 shrink-0 cursor-pointer ${
               activeTab === 'pending'
                 ? 'border-[#315B3D] text-[#315B3D]'
                 : 'border-transparent text-gray-500 hover:text-gray-800'
@@ -492,43 +523,43 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
 
           <button
             onClick={() => setActiveTab('businesses')}
-            className={`py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 cursor-pointer ${
+            className={`py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-1.5 sm:gap-2 shrink-0 cursor-pointer ${
               activeTab === 'businesses'
                 ? 'border-[#315B3D] text-[#315B3D]'
                 : 'border-transparent text-gray-500 hover:text-gray-800'
             }`}
           >
             <Store className="w-4 h-4" />
-            Todos os Negócios ({businesses.length})
+            Negócios ({businesses.length})
           </button>
 
           <button
             onClick={() => setActiveTab('categories')}
-            className={`py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 cursor-pointer ${
+            className={`py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-1.5 sm:gap-2 shrink-0 cursor-pointer ${
               activeTab === 'categories'
                 ? 'border-[#315B3D] text-[#315B3D]'
                 : 'border-transparent text-gray-500 hover:text-gray-800'
             }`}
           >
             <Layers className="w-4 h-4" />
-            Gerenciar Categorias
+            Categorias
           </button>
 
           <button
             onClick={() => setActiveTab('messages')}
-            className={`py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 cursor-pointer ${
+            className={`py-3 text-xs sm:text-sm font-bold border-b-2 transition-colors flex items-center gap-1.5 sm:gap-2 shrink-0 cursor-pointer ${
               activeTab === 'messages'
                 ? 'border-[#315B3D] text-[#315B3D]'
                 : 'border-transparent text-gray-500 hover:text-gray-800'
             }`}
           >
             <MessageSquare className="w-4 h-4" />
-            Mensagens de Contato ({messages.length})
+            Mensagens ({messages.length})
           </button>
         </div>
 
         {/* Tab Content Body */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           {/* TAB 1: PENDING REQUESTS */}
           {activeTab === 'pending' && (
             <div className="space-y-4">
@@ -615,7 +646,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                     placeholder="Filtrar empreendedores ou serviços..."
                     value={adminSearch}
                     onChange={(e) => setAdminSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8DBF91]"
+                    className="w-full pl-9 pr-3 py-2 text-base sm:text-xs bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8DBF91]"
                   />
                 </div>
                 <span className="text-xs text-gray-500 font-medium">
@@ -623,7 +654,72 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                 </span>
               </div>
 
-              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-xs">
+              {/* Mobile card layout for businesses */}
+              <div className="grid grid-cols-1 gap-3 md:hidden">
+                {filteredBusinesses.map((b) => (
+                  <div key={b.id} className="bg-white rounded-2xl p-4 border border-gray-200 space-y-2.5 shadow-2xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-sm text-gray-900 truncate">{b.name}</h4>
+                        <p className="text-xs text-gray-500">{b.ownerName} • {formatWhatsAppDisplay(b.whatsapp)}</p>
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0 ${
+                          b.status === 'approved'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : b.status === 'pending'
+                            ? 'bg-amber-100 text-amber-800'
+                            : b.status === 'suspended'
+                            ? 'bg-purple-100 text-purple-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}
+                      >
+                        {b.status === 'approved'
+                          ? 'Aprovado'
+                          : b.status === 'pending'
+                          ? 'Pendente'
+                          : b.status === 'suspended'
+                          ? 'Suspenso'
+                          : 'Recusado'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      {b.categoryName}
+                      {b.subcategory ? ` › ${b.subcategory}` : ''}
+                    </div>
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+                      <button
+                        onClick={() => handleToggleStatus(b)}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer ${
+                          b.status === 'approved'
+                            ? 'text-amber-700 border-amber-200 bg-amber-50'
+                            : 'text-emerald-700 border-emerald-200 bg-emerald-50'
+                        }`}
+                      >
+                        {b.status === 'approved' ? (
+                          <><PauseCircle className="w-3.5 h-3.5" /> Suspender</>
+                        ) : (
+                          <><PlayCircle className="w-3.5 h-3.5" /> Ativar</>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => setEditingBusiness(b)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 cursor-pointer"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" /> Editar
+                      </button>
+                      <button
+                        onClick={() => setConfirmDelete({ type: 'business', id: b.id, name: b.name })}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-red-700 bg-red-50 border border-red-200 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Excluir
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="hidden md:block bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-xs">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-[#EAF4E9] text-[#315B3D] font-bold border-b border-[#D5E4D6]">
@@ -702,7 +798,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
 
                             {/* Delete */}
                             <button
-                              onClick={() => handleDeleteBusiness(b.id)}
+                              onClick={() => setConfirmDelete({ type: 'business', id: b.id, name: b.name })}
                               className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                               title="Remover"
                             >
@@ -767,7 +863,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDeleteCategory(c.id)}
+                          onClick={() => setConfirmDelete({ type: 'category', id: c.id, name: c.name })}
                           className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                           title="Excluir categoria"
                         >
@@ -871,8 +967,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
 
         {/* Edit Business Modal */}
         {editingBusiness && (
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-2xs flex items-center justify-center p-4 z-50 overflow-y-auto">
-            <div className="bg-white rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-xl">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-2xs flex items-start sm:items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto">
+            <div className="bg-white rounded-2xl p-5 sm:p-6 max-w-lg w-full space-y-4 shadow-xl my-auto max-h-[88dvh] overflow-y-auto">
               <h4 className="font-bold text-gray-900 text-sm">Editar Cadastro de Negócio</h4>
               <form onSubmit={handleSaveBusinessEdit} className="space-y-3 text-xs">
                 <div>
@@ -881,7 +977,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                     type="text"
                     value={editingBusiness.name}
                     onChange={(e) => setEditingBusiness({ ...editingBusiness, name: e.target.value })}
-                    className="w-full p-2.5 border border-gray-300 rounded-xl"
+                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
                   />
                 </div>
                 <div>
@@ -890,7 +986,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                     type="text"
                     value={editingBusiness.ownerName}
                     onChange={(e) => setEditingBusiness({ ...editingBusiness, ownerName: e.target.value })}
-                    className="w-full p-2.5 border border-gray-300 rounded-xl"
+                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
                   />
                 </div>
                 <div>
@@ -900,7 +996,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                     value={editingBusiness.subcategory || ''}
                     onChange={(e) => setEditingBusiness({ ...editingBusiness, subcategory: e.target.value })}
                     placeholder="Ex: Barbeiro, Piscineiro, Locação de caçambas"
-                    className="w-full p-2.5 border border-gray-300 rounded-xl"
+                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
                   />
                 </div>
                 <div>
@@ -909,7 +1005,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                     type="text"
                     value={editingBusiness.whatsapp}
                     onChange={(e) => setEditingBusiness({ ...editingBusiness, whatsapp: e.target.value })}
-                    className="w-full p-2.5 border border-gray-300 rounded-xl"
+                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
                   />
                 </div>
                 <div>
@@ -918,7 +1014,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                     rows={3}
                     value={editingBusiness.description}
                     onChange={(e) => setEditingBusiness({ ...editingBusiness, description: e.target.value })}
-                    className="w-full p-2.5 border border-gray-300 rounded-xl"
+                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
                   />
                 </div>
                 <div>
@@ -927,20 +1023,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                     type="text"
                     value={editingBusiness.keywords}
                     onChange={(e) => setEditingBusiness({ ...editingBusiness, keywords: e.target.value })}
-                    className="w-full p-2.5 border border-gray-300 rounded-xl"
+                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
                   />
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <button
                     type="button"
                     onClick={() => setEditingBusiness(null)}
-                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl"
+                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl cursor-pointer"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 font-bold bg-[#315B3D] text-white rounded-xl hover:bg-[#25462e]"
+                    className="px-5 py-2 font-bold bg-[#315B3D] text-white rounded-xl hover:bg-[#25462e] cursor-pointer"
                   >
                     Salvar Alterações
                   </button>
@@ -952,8 +1048,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
 
         {/* Create Category Modal */}
         {newCategoryModalOpen && (
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-2xs flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-2xl p-6 max-w-md w-full space-y-4 shadow-xl">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-2xs flex items-start sm:items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto">
+            <div className="bg-white rounded-2xl p-5 sm:p-6 max-w-md w-full space-y-4 shadow-xl my-auto max-h-[88dvh] overflow-y-auto">
               <h4 className="font-bold text-gray-900 text-sm">Criar Nova Categoria</h4>
               <form onSubmit={handleCreateCategory} className="space-y-3 text-xs">
                 <div>
@@ -964,7 +1060,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                     placeholder="Ex: Farmácias e Saúde"
                     value={newCatData.name}
                     onChange={(e) => setNewCatData({ ...newCatData, name: e.target.value })}
-                    className="w-full p-2.5 border border-gray-300 rounded-xl"
+                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
                   />
                 </div>
                 <div>
@@ -974,7 +1070,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                     placeholder="farmacias-e-saude"
                     value={newCatData.slug}
                     onChange={(e) => setNewCatData({ ...newCatData, slug: e.target.value })}
-                    className="w-full p-2.5 border border-gray-300 rounded-xl"
+                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
                   />
                 </div>
                 <div>
@@ -982,7 +1078,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                   <select
                     value={newCatData.icon}
                     onChange={(e) => setNewCatData({ ...newCatData, icon: e.target.value })}
-                    className="w-full p-2.5 border border-gray-300 rounded-xl"
+                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
                   >
                     <option value="Store">Loja / Comércio (Store)</option>
                     <option value="Utensils">Alimentação (Utensils)</option>
@@ -1009,20 +1105,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                     placeholder="Ex: Barbeiro, Manicure e pedicure, Cabeleireiro(a)"
                     value={newCatData.subcategoriesText}
                     onChange={(e) => setNewCatData({ ...newCatData, subcategoriesText: e.target.value })}
-                    className="w-full p-2.5 border border-gray-300 rounded-xl"
+                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
                   />
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <button
                     type="button"
                     onClick={() => setNewCategoryModalOpen(false)}
-                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl"
+                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl cursor-pointer"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 font-bold bg-[#315B3D] text-white rounded-xl hover:bg-[#25462e]"
+                    className="px-5 py-2 font-bold bg-[#315B3D] text-white rounded-xl hover:bg-[#25462e] cursor-pointer"
                   >
                     Salvar Categoria
                   </button>
@@ -1034,8 +1130,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
 
         {/* Edit Category Modal */}
         {editingCategory && (
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-2xs flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-2xl p-6 max-w-md w-full space-y-4 shadow-xl">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-2xs flex items-start sm:items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto">
+            <div className="bg-white rounded-2xl p-5 sm:p-6 max-w-md w-full space-y-4 shadow-xl my-auto max-h-[88dvh] overflow-y-auto">
               <h4 className="font-bold text-gray-900 text-sm">Editar Categoria e Atividades</h4>
               <form onSubmit={handleSaveCategoryEdit} className="space-y-3 text-xs">
                 <div>
@@ -1045,7 +1141,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                     required
                     value={editingCategory.name}
                     onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
-                    className="w-full p-2.5 border border-gray-300 rounded-xl"
+                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
                   />
                 </div>
                 <div>
@@ -1054,7 +1150,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                     type="text"
                     value={editingCategory.description || ''}
                     onChange={(e) => setEditingCategory({ ...editingCategory, description: e.target.value })}
-                    className="w-full p-2.5 border border-gray-300 rounded-xl"
+                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
                   />
                 </div>
                 <div>
@@ -1064,25 +1160,68 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, onDataC
                     value={editCatSubText}
                     onChange={(e) => setEditCatSubText(e.target.value)}
                     placeholder="Ex: Barbeiro, Manicure e pedicure, Estética"
-                    className="w-full p-2.5 border border-gray-300 rounded-xl"
+                    className="w-full p-2.5 text-base sm:text-xs border border-gray-300 rounded-xl"
                   />
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <button
                     type="button"
                     onClick={() => setEditingCategory(null)}
-                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl"
+                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl cursor-pointer"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 font-bold bg-[#315B3D] text-white rounded-xl hover:bg-[#25462e]"
+                    className="px-5 py-2 font-bold bg-[#315B3D] text-white rounded-xl hover:bg-[#25462e] cursor-pointer"
                   >
                     Salvar Alterações
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* In-App Delete Confirmation Modal */}
+        {confirmDelete && (
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-2xs flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-xl border border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-gray-900 text-sm">
+                    {confirmDelete.type === 'business' ? 'Excluir Cadastro' : 'Excluir Categoria'}
+                  </h4>
+                  <p className="text-xs text-gray-500">Esta ação não pode ser desfeita.</p>
+                </div>
+              </div>
+              <p className="text-xs text-gray-700 leading-relaxed">
+                Tem certeza que deseja excluir permanentemente{' '}
+                <strong className="text-gray-900">"{confirmDelete.name}"</strong>?
+              </p>
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(null)}
+                  className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-xl cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    confirmDelete.type === 'business'
+                      ? handleDeleteBusinessConfirm(confirmDelete.id)
+                      : handleDeleteCategoryConfirm(confirmDelete.id)
+                  }
+                  className="px-4 py-2 text-xs font-bold bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-sm cursor-pointer"
+                >
+                  Sim, excluir
+                </button>
+              </div>
             </div>
           </div>
         )}
